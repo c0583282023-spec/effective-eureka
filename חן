@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>המחברת הקולינרית האינטראקטיבית</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Rubik', sans-serif; background-color: #fdfbf7; color: #4a4a4a; }
+        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .step-active { border-right: 4px solid #10b981; background-color: #f0fdf4; }
+        /* הגבלת הגודל המקסימלי של הגרפים כדי שלא יתמתחו יותר מדי ברוחב מלא */
+        .chart-container { position: relative; width: 100%; max-width: 500px; margin: 0 auto; height: 350px; max-height: 350px; }
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+    </style>
+    <!-- Chosen Palette: Warm Neutrals & Soft Pastels (Cream, Sage Green, Berry Pink, Slate Gray) -->
+    <!-- Application Structure Plan: 
+         1. Header & Stats: Quick summary of the collection.
+         2. Interactive Dashboard (Top): High-level nutritional comparison tools (Bar charts) to help users choose based on macros.
+         3. Filter & Gallery: Search/Filter recipes by category/macros. Grid view of cards.
+         4. Recipe Modal (Deep Dive):
+            - Macro Distribution (Donut Chart).
+            - Interactive Ingredient Checklist.
+            - "Cook Mode": Step-by-step instruction highlighter.
+         Rationale: Users often choose recipes based on either "what I crave" (Gallery) or "what fits my macros" (Dashboard) (The logic remains the same, but the layout is now designed to fill available width better).
+    -->
+    <!-- Visualization & Content Choices:
+         - Global Stats: Bar Charts (Chart.js) to compare Protein/Calories across all recipes.
+         - Recipe Detail: Doughnut Chart (Chart.js) for visual macro breakdown (Protein/Carbs/Fat).
+         - Visuals: Emoji icons and CSS-styled cards instead of images to maintain lightweight, clean aesthetic without external dependencies.
+         - Interactions: Filter logic, Modal open/close, Checklist toggles, Step navigation.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="bg-stone-50 min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <!-- הסרתי את max-w-7xl והשארתי רק padding גלובלי -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center">
+                    <span class="text-2xl mr-2">🥗</span>
+                    <h1 class="text-xl font-bold text-gray-800">המחברת הקולינרית</h1>
+                </div>
+                <div class="flex space-x-4 space-x-reverse text-sm">
+                    <button onclick="scrollToSection('gallery')" class="text-gray-600 hover:text-green-600 font-medium px-3 py-2">מתכונים</button>
+                    <button onclick="scrollToSection('analytics')" class="text-gray-600 hover:text-green-600 font-medium px-3 py-2">אנליטיקס</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <!-- שינוי: הסרתי max-w-7xl והוספתי padding רוחבי גלובלי ל-main -->
+    <main class="flex-grow mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-12">
+
+        <!-- Intro Section -->
+        <section class="text-center space-y-4">
+            <h2 class="text-3xl font-bold text-gray-900">ברוכים הבאים למטבח הבריא</h2>
+            <p class="max-w-4xl mx-auto text-lg text-gray-600">
+                אוסף אינטראקטיבי של מתכונים שנבחרו בקפידה. כאן תוכלו לחקור את הערכים התזונתיים, לסנן לפי העדפות, ולהשתמש במצב "בישול חכם" להכנה קלה ומהירה. הפריסה הנוכחית מותאמת למסכים גדולים ורחבים.
+            </p>
+        </section>
+
+        <!-- Analytics Section -->
+        <section id="analytics" class="bg-white rounded-2xl shadow-xl p-6 border border-stone-100">
+            <div class="mb-6">
+                <h3 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                    <span>📊</span> השוואה תזונתית גלובלית
+                </h3>
+                <p class="text-base text-gray-500 mt-1">
+                    השוואה ויזואלית של כל המתכונים במאגר. הגרפים מוגבלים ברוחבם המקסימלי כדי לשמור על קריאות מיטבית במסכים רחבים.
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                <!-- Calorie Comparison -->
+                <div class="flex flex-col">
+                    <h4 class="text-lg font-semibold text-center mb-4 text-gray-700">השוואת קלוריות (למנה)</h4>
+                    <div class="chart-container bg-stone-50 rounded-xl p-4 shadow-inner">
+                        <canvas id="caloriesChart"></canvas>
+                    </div>
+                </div>
+                <!-- Protein Comparison -->
+                <div class="flex flex-col">
+                    <h4 class="text-lg font-semibold text-center mb-4 text-gray-700">מובילי החלבון (גרם למנה)</h4>
+                    <div class="chart-container bg-stone-50 rounded-xl p-4 shadow-inner">
+                        <canvas id="proteinChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recipe Gallery & Filters -->
+        <section id="gallery" class="space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-xl border border-stone-100">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800">ספריית המתכונים</h3>
+                    <p class="text-sm text-gray-500">בחרו מתכון כדי לצפות בהוראות ההכנה</p>
+                </div>
+                <!-- Filters -->
+                <div class="flex flex-wrap gap-2 justify-center" id="filterContainer">
+                    <button onclick="filterRecipes('all')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-800 text-white transition-colors" data-filter="all">הכל</button>
+                    <button onclick="filterRecipes('salty')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-stone-100 text-gray-600 hover:bg-stone-200 transition-colors" data-filter="salty">מלוח / עיקרי</button>
+                    <button onclick="filterRecipes('sweet')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-stone-100 text-gray-600 hover:bg-stone-200 transition-colors" data-filter="sweet">מתוק / קינוח</button>
+                    <button onclick="filterRecipes('high_protein')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium bg-stone-100 text-gray-600 hover:bg-stone-200 transition-colors" data-filter="high_protein">חלבון גבוה</button>
+                </div>
+            </div>
+
+            <!-- Grid - שינוי: הגדלת מספר העמודות במסכים גדולים ל-4 -->
+            <div id="recipeGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <!-- Cards injected by JS -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Recipe Modal (Hidden by default) -->
+    <div id="recipeModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex items-center justify-center p-4 backdrop-blur-sm transition-opacity duration-300">
+        <!-- שינוי: הגדלת הרוחב המקסימלי של המודל ל-max-w-5xl -->
+        <div class="bg-white rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl transform transition-transform duration-300 scale-95" id="modalContent">
+            
+            <!-- Modal Header -->
+            <div class="bg-stone-50 p-4 border-b border-stone-200 flex justify-between items-center sticky top-0 z-10">
+                <div class="flex items-center gap-3">
+                    <span id="modalIcon" class="text-3xl"></span>
+                    <div>
+                        <h2 id="modalTitle" class="text-xl font-bold text-gray-900"></h2>
+                        <span id="modalMeta" class="text-xs text-gray-500 flex gap-2"></span>
+                    </div>
+                </div>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 p-2 text-2xl font-bold">&times;</button>
+            </div>
+
+            <!-- Modal Body (Scrollable) -->
+            <!-- שינוי: הפיכת הפריסה ל-1:2 עמודות במקום 1:1.5 והגדלת המרווחים -->
+            <div class="overflow-y-auto flex-grow p-8 grid grid-cols-1 lg:grid-cols-3 gap-10">
+                
+                <!-- Left Column: Ingredients & Macros -->
+                <div class="lg:col-span-1 space-y-8 border-l border-stone-100 pl-0 lg:pl-8">
+                    
+                    <!-- Macros Chart -->
+                    <div class="bg-white rounded-xl border border-stone-200 p-4 shadow-md">
+                        <h4 class="text-base font-bold text-gray-700 mb-3 text-center">פילוח מקרו-נוטריינטים למנה (גרם)</h4>
+                        <div class="chart-container h-48 max-h-48 mx-auto relative">
+                            <canvas id="macroChart"></canvas>
+                        </div>
+                        <div class="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-semibold">
+                            <div class="bg-blue-50 p-2 rounded-lg text-blue-700"><span class="block font-bold text-lg" id="macroProtein"></span>חלבון</div>
+                            <div class="bg-yellow-50 p-2 rounded-lg text-yellow-700"><span class="block font-bold text-lg" id="macroCarbs"></span>פחמימה</div>
+                            <div class="bg-red-50 p-2 rounded-lg text-red-700"><span class="block font-bold text-lg" id="macroFat"></span>שומן</div>
+                        </div>
+                    </div>
+
+                    <!-- Ingredients List -->
+                    <div>
+                        <h3 class="font-bold text-xl text-gray-800 mb-4 flex items-center gap-2">
+                            <span>🛒</span> מצרכים
+                        </h3>
+                        <ul id="modalIngredients" class="space-y-3 text-base text-gray-700">
+                            <!-- JS populates checkboxes -->
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Right Column: Instructions -->
+                <div class="lg:col-span-2">
+                    <h3 class="font-bold text-xl text-gray-800 mb-4 flex items-center gap-2">
+                        <span>👩‍🍳</span> הוראות הכנה: מצב בישול
+                    </h3>
+                    
+                    <!-- Cook Mode Controls -->
+                    <div class="mb-6 flex items-center justify-between bg-green-50/50 p-4 rounded-lg border border-green-200">
+                        <span class="text-base font-medium text-gray-700">בצעו צעד אחר צעד</span>
+                        <div class="flex gap-3">
+                            <button onclick="prevStep()" class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed" id="btnPrev">הקודם</button>
+                            <span id="stepIndicator" class="text-base font-bold self-center w-16 text-center text-gray-800">1/5</span>
+                            <button onclick="nextStep()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed" id="btnNext">הבא</button>
+                        </div>
+                    </div>
+
+                    <!-- Steps Container -->
+                    <div id="modalSteps" class="space-y-5">
+                        <!-- JS populates steps -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8 mt-12">
+        <div class="max-w-full mx-auto px-4 text-center">
+            <p class="text-gray-400 text-sm">© 2025 FitMama Interactive Booklet. נוצר על בסיס נתוני מתכונים מקוריים.</p>
+        </div>
+    </footer>
+
+    <script>
+        // --- Data Source ---
+        const recipes = [
+            {
+                id: 1,
+                title: "ביס זיתים נשנוש",
+                category: "salty",
+                time: 40,
+                servings: 8,
+                calories: 124.3,
+                protein: 5.4,
+                carbs: 11.8,
+                fat: 4.1,
+                icon: "🌿",
+                desc: "כדורים מלוחים וטעימים, מושלמים לנשנוש או אירוח. עשירים בזיתים וגבינות.",
+                ingredients: [
+                    "1 כוס קמח מלא (130 גרם)",
+                    "1 כף אבקת אפייה (4.6 גרם)",
+                    "1.5 כפות שמן זית (22.5 גרם)",
+                    "5 כפות גדושות גבינה לבנה 5% (100 גרם)",
+                    "0.3 כפית מלח (1.5 גרם)",
+                    "2 פרוסות גבינה צהובה 15% (40 גרם)",
+                    "16 יחידות זיתים מגולענים (32 גרם)",
+                    "1 ביצה (60 גרם)",
+                    "1 כפית שומשום או קצח"
+                ],
+                steps: [
+                    "ערבבו את כל רכיבי הבצק (קמח, אבקת אפייה, שמן זית, גבינה לבנה, מלח וקוביות גבינה צהובה) עד לקבלת בצק אחיד.",
+                    "חלקו את הבצק ל-16 עיגולים. שטחו כל עיגול, מלאו אותו בזית (בערך יחידה קצוצה), סגרו ומגרו לכדור.",
+                    "חממו תנור ל-180 מעלות. הברישו את הכדורים בביצה ופזרו שומשום/קצח.",
+                    "אפו במשך 25 דקות."
+                ]
+            },
+            {
+                id: 2,
+                title: "חצ'פורי (Khachapuri)",
+                category: "salty",
+                time: 15,
+                servings: 1,
+                calories: 323,
+                protein: 17,
+                carbs: 21.6,
+                fat: 0, 
+                icon: "🥚",
+                desc: "מאפה גבינות מסורתי בגרסה קלילה יותר, עם ביצה במרכז. מוכן במהירות.",
+                ingredients: [
+                    "4 כפות קמח כוסמין (36 גרם)",
+                    "1 כף גבינה לבנה 5% (20 גרם)",
+                    "0.5 כפית אבקת אפייה",
+                    "0.3 כפית מלח",
+                    "0.3 כפית פלפל שחור",
+                    "3 כפות גבינה צהובה מגוררת 15% (36 גרם)",
+                    "1 ביצה"
+                ],
+                steps: [
+                    "ערבבו קמח, גבינה לבנה, אבקת אפייה, מלח ופלפל ושלו היטב.",
+                    "רדדו את הבצק למלבן דק. גלגלו את הקצוות מהצד הארוך כלפי פנים וצרו צורת סירה.",
+                    "פזרו את הגבינה בתוך ה'סירה' ואפו בתנור שחומם מראש ל-180 מעלות במשך 15 דקות.",
+                    "הוציאו מהתנור, שברו בפנים את הביצה ואפו עוד 5-10 דקות עד דרגת הנוזליות הרצויה."
+                ]
+            },
+            {
+                id: 3,
+                title: "פנקייק שקדים",
+                category: "sweet",
+                time: 15,
+                servings: 6,
+                calories: 205.3,
+                protein: 10.5,
+                carbs: 6.5,
+                fat: 10,
+                icon: "🥞",
+                desc: "פנקייקים עשירים וללא גלוטן (בשימוש קמח שקדים), מעולים לארוחת בוקר מפנקת.",
+                ingredients: [
+                    "3 ביצים",
+                    "2 כפות מייפל",
+                    "1.2 כוסות קמח שקדים",
+                    "0.5 כפית סודה לשתייה",
+                    "0.5 כפית אבקת אפייה",
+                    "1 גביע יוגורט פרו",
+                    "0.5 כוס אוכמניות"
+                ],
+                steps: [
+                    "ערבבו ביצים, מייפל, קמח שקדים, אבקת סודה לשתייה ואבקת אפייה לבלילה אחידה. הניחו בצד ל-10 דקות.",
+                    "חממו מחבת עם תרסיס שמן. צרו עיגולים קטנים וטגנו מכל צד 2-3 דקות.",
+                    "הגישו לצד יוגורט פרו ואוכמניות."
+                ]
+            },
+            {
+                id: 4,
+                title: "נקניק שוקולד",
+                category: "sweet",
+                time: 15,
+                servings: 10,
+                calories: 114.6,
+                protein: 1.4,
+                carbs: 10.2,
+                fat: 5.9,
+                icon: "🍫",
+                desc: "קינוח נוסטלגי ואהוב בגרסה ביתית. פשוט להכנה וטעים להפליא.",
+                ingredients: [
+                    "15 יחידות פתי בר (112.5 גרם)",
+                    "1 כף קקאו",
+                    "0.5 כוס חלב",
+                    "0.5 כפית דבש",
+                    "1 חבילה שוקולד מריר (100 גרם)"
+                ],
+                steps: [
+                    "רסקו את הפתי בר לפירורים גסים.",
+                    "הוסיפו קקאו, חלב ודבש וערבבו היטב.",
+                    "המיסו את השוקולד המריר בפולסים קצרים במיקרוגל.",
+                    "הוסיפו את השוקולד המומס לתערובת וערבבו עד איחוד.",
+                    "העבירו לניילון נצמד, צרו גליל והקפיאו לשעה.",
+                    "חתכו לפרוסות והגישו."
+                ]
+            },
+            {
+                id: 5,
+                title: "קציצות דגים בתנור",
+                category: "high_protein",
+                time: 40,
+                servings: 6,
+                calories: 110,
+                protein: 20.2,
+                carbs: 1.6,
+                fat: 0,
+                icon: "🐟",
+                desc: "מנה עיקרית עשירה בחלבון ודלת שומן. קציצות עסיסיות מלאות בעשבי תיבול.",
+                ingredients: [
+                    "0.5 כוס פטרוזיליה קצוצה",
+                    "0.5 כוס כוסברה קצוצה",
+                    "500 גרם פילה דג (בס/מושט)",
+                    "1 ביצה",
+                    "2 בצלים קצוצים",
+                    "3 שיני שום קצוצות",
+                    "1 כף פפריקה מתוקה",
+                    "2 כפות פירורי לחם",
+                    "1 כפית כמון",
+                    "תרסיס שמן"
+                ],
+                steps: [
+                    "חממו תנור ל-180 מעלות.",
+                    "במעבד מזון, ערבבו את כל הרכיבים לתערובת אחידה.",
+                    "צרו קציצות בגודל בינוני והניחו על תבנית מרופדת בנייר אפייה משומן.",
+                    "אפו כ-30 דקות או עד להזהבה."
+                ]
+            },
+            {
+                id: 6,
+                title: "פנקייק 60 קלוריות",
+                category: "sweet",
+                time: 30,
+                servings: 5,
+                calories: 191, // Note: Recipe booklet says 191 for 2 units serving
+                protein: 6.8,
+                carbs: 25.8,
+                fat: 0,
+                icon: "🫐",
+                desc: "פנקייק אוורירי וקל, בסיס מעולה לתוספות פרי ויוגורט.",
+                ingredients: [
+                    "1 ביצה",
+                    "1 כוס חלב",
+                    "1 כפית תמצית וניל",
+                    "1 כפית מייפל",
+                    "1 כוס קמח",
+                    "1 כף סוכר",
+                    "1 כפית אבקת אפייה",
+                    "תרסיס שמן",
+                    "1 גביע יוגורט פרו (להגשה)",
+                    "2 כפות פירות יער (להגשה)"
+                ],
+                steps: [
+                    "ערבבו את מרכיבי הבלילה (ללא יוגורט ופירות). קררו ל-30 דקות.",
+                    "צקו למחבת חמה ומשומנת, כסו ובשלו על אש נמוכה.",
+                    "הפכו כשהפנקייק נפרד בקלות והשחימו צד שני.",
+                    "הגישו 2 יחידות עם יוגורט ופירות יער."
+                ]
+            }
+        ];
+
+        // --- Application State ---
+        let currentFilter = 'all';
+        let currentRecipe = null;
+        let activeStep = 0;
+        let charts = {}; // Store chart instances
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            renderGallery();
+            initDashboardCharts();
+        });
+
+        function scrollToSection(id) {
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // --- Dashboard Logic ---
+        function initDashboardCharts() {
+            // Calories Comparison Bar Chart
+            const ctxCal = document.getElementById('caloriesChart').getContext('2d');
+            
+            if (charts.calories) {
+                charts.calories.destroy();
+            }
+
+            charts.calories = new Chart(ctxCal, {
+                type: 'bar',
+                data: {
+                    labels: recipes.map(r => r.title),
+                    datasets: [{
+                        label: 'קלוריות למנה',
+                        data: recipes.map(r => r.calories),
+                        backgroundColor: 'rgba(255, 159, 64, 0.7)',
+                        borderColor: 'rgba(255, 159, 64, 1)',
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {rtl: true}
+                    },
+                    scales: { 
+                        x: { beginAtZero: true },
+                        y: { ticks: { mirror: true, padding: 10 } }
+                    }
+                }
+            });
+
+            // Protein Leaderboard
+            const sortedByProtein = [...recipes].sort((a, b) => b.protein - a.protein);
+            const ctxProt = document.getElementById('proteinChart').getContext('2d');
+
+            if (charts.protein) {
+                charts.protein.destroy();
+            }
+
+            charts.protein = new Chart(ctxProt, {
+                type: 'bar',
+                data: {
+                    labels: sortedByProtein.map(r => r.title),
+                    datasets: [{
+                        label: 'חלבון (גרם)',
+                        data: sortedByProtein.map(r => r.protein),
+                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {rtl: true}
+                    },
+                    scales: { 
+                        x: { beginAtZero: true },
+                        y: { ticks: { mirror: true, padding: 10 } }
+                    }
+                }
+            });
+        }
+
+        // --- Gallery Logic ---
+        function filterRecipes(filter) {
+            currentFilter = filter;
+            
+            // Update buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if(btn.dataset.filter === filter) {
+                    btn.classList.remove('bg-stone-100', 'text-gray-600', 'hover:bg-stone-200');
+                    btn.classList.add('bg-gray-800', 'text-white');
+                } else {
+                    btn.classList.add('bg-stone-100', 'text-gray-600', 'hover:bg-stone-200');
+                    btn.classList.remove('bg-gray-800', 'text-white');
+                }
+            });
+
+            renderGallery();
+        }
+
+        function renderGallery() {
+            const grid = document.getElementById('recipeGrid');
+            grid.innerHTML = '';
+
+            const filtered = recipes.filter(r => {
+                if (currentFilter === 'all') return true;
+                if (currentFilter === 'high_protein' && r.protein > 10) return true;
+                if (currentFilter === 'salty' && (r.category === 'salty' || r.category === 'high_protein')) return true;
+                if (currentFilter === 'sweet' && r.category === 'sweet') return true;
+                return false;
+            });
+
+            filtered.forEach(r => {
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-xl overflow-hidden shadow-lg border border-stone-100 card-hover cursor-pointer flex flex-col h-full";
+                card.onclick = () => openModal(r.id);
+
+                card.innerHTML = `
+                    <div class="h-32 bg-stone-100 flex items-center justify-center text-6xl">
+                        ${r.icon}
+                    </div>
+                    <div class="p-5 flex-grow flex flex-col">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-xl text-gray-800 leading-tight">${r.title}</h3>
+                            <span class="bg-gray-200 text-gray-700 text-sm px-3 py-1 rounded-full whitespace-nowrap">${r.time} דק'</span>
+                        </div>
+                        <p class="text-gray-500 text-sm mb-4 line-clamp-2 flex-grow">${r.desc}</p>
+                        <div class="mt-auto flex justify-between items-center text-base font-medium pt-4 border-t border-stone-100">
+                            <span class="text-orange-600 flex items-center gap-1">🔥 ${Math.round(r.calories)} קל'</span>
+                            <span class="text-blue-600 flex items-center gap-1">💪 ${r.protein}ג' חלבון</span>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // --- Modal Logic ---
+        function openModal(id) {
+            currentRecipe = recipes.find(r => r.id === id);
+            if (!currentRecipe) return;
+
+            // Populate Text
+            document.getElementById('modalTitle').innerText = currentRecipe.title;
+            document.getElementById('modalIcon').innerText = currentRecipe.icon;
+            document.getElementById('modalMeta').innerHTML = `<span>⏳ ${currentRecipe.time} דקות</span> | <span>🍽️ ${currentRecipe.servings} מנות</span> | <span>🔥 ${Math.round(currentRecipe.calories)} קלוריות</span>`;
+            document.getElementById('macroProtein').innerText = currentRecipe.protein + 'ג\'';
+            document.getElementById('macroCarbs').innerText = currentRecipe.carbs + 'ג\'';
+            document.getElementById('macroFat').innerText = currentRecipe.fat + 'ג\'';
+
+            // Populate Ingredients
+            const ingList = document.getElementById('modalIngredients');
+            ingList.innerHTML = '';
+            currentRecipe.ingredients.forEach((ing, i) => {
+                const li = document.createElement('li');
+                li.className = "flex items-start gap-2 group cursor-pointer hover:bg-stone-50 p-2 rounded-lg transition";
+                li.onclick = function() { 
+                    const checkbox = this.querySelector('input');
+                    checkbox.checked = !checkbox.checked;
+                };
+                li.innerHTML = `
+                    <input type="checkbox" class="mt-1 accent-green-600 cursor-pointer w-4 h-4">
+                    <span class="group-hover:text-gray-900 transition-colors flex-grow">${ing}</span>
+                `;
+                ingList.appendChild(li);
+            });
+
+            // Initialize Cook Mode
+            activeStep = 0;
+            renderSteps();
+
+            // Render Macro Chart
+            // Use setTimeout to ensure the canvas element is fully rendered in the DOM before Chart.js tries to draw on it
+            setTimeout(renderMacroChart, 50); 
+
+            // Show Modal
+            const modal = document.getElementById('recipeModal');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                document.getElementById('modalContent').classList.remove('scale-95');
+                document.getElementById('modalContent').classList.add('scale-100');
+            }, 10);
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('recipeModal');
+            document.getElementById('modalContent').classList.remove('scale-100');
+            document.getElementById('modalContent').classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            }, 300);
+        }
+
+        // --- Cook Mode Logic ---
+        function renderSteps() {
+            const container = document.getElementById('modalSteps');
+            container.innerHTML = '';
+            
+            currentRecipe.steps.forEach((step, index) => {
+                const div = document.createElement('div');
+                div.className = `p-5 rounded-xl border transition-all duration-300 shadow-sm ${index === activeStep ? 'border-green-400 bg-green-50 step-active shadow-md' : 'border-stone-100 bg-white opacity-75 hover:opacity-100'}`;
+                
+                div.innerHTML = `
+                    <div class="flex gap-4">
+                        <span class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${index === activeStep ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'}">
+                            ${index + 1}
+                        </span>
+                        <p class="text-gray-700 text-base leading-relaxed">${step}</p>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            // Update Controls
+            document.getElementById('stepIndicator').innerText = `${activeStep + 1}/${currentRecipe.steps.length}`;
+            document.getElementById('btnPrev').disabled = activeStep === 0;
+            document.getElementById('btnNext').disabled = activeStep === currentRecipe.steps.length - 1;
+            
+            // Auto scroll to active step
+            const activeEl = container.children[activeStep];
+            if(activeEl) {
+                activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function nextStep() {
+            if (activeStep < currentRecipe.steps.length - 1) {
+                activeStep++;
+                renderSteps();
+            }
+        }
+
+        function prevStep() {
+            if (activeStep > 0) {
+                activeStep--;
+                renderSteps();
+            }
+        }
+
+        // --- Detailed Chart Logic ---
+        function renderMacroChart() {
+            const ctx = document.getElementById('macroChart').getContext('2d');
+            
+            if (charts.macro) {
+                charts.macro.destroy();
+            }
+
+            charts.macro = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['חלבון', 'פחמימות', 'שומן'],
+                    datasets: [{
+                        data: [currentRecipe.protein, currentRecipe.carbs, currentRecipe.fat],
+                        backgroundColor: [
+                            'rgba(54, 162, 235, 0.8)', // Protein - Blue
+                            'rgba(255, 206, 86, 0.8)', // Carbs - Yellow
+                            'rgba(255, 99, 132, 0.8)'  // Fat - Red
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            rtl: true,
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.label}: ${context.raw} גרם`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        // Close modal on outside click
+        document.getElementById('recipeModal').addEventListener('click', (e) => {
+            if (e.target.id === 'recipeModal') closeModal();
+        });
+
+    </script>
+</body>
+</html>
